@@ -1,0 +1,19 @@
+* text=auto eol=lf
+*.bin binary
+*.hex binary
+*.elf binary
+*.ld text eol=lf
+*.s text eol=lf
+*.ioc text eol=lf
+*.c text eol=lf
+*.h text eol=lf
+*.cpp text eol=lf
+*.hpp text eol=lf
+*.xml text eol=lf
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.exe binary
+*.dll binary
+/Debug/* binary
+/Release/* binary
