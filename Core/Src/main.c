@@ -99,7 +99,7 @@ int main(void)
 
   cli_init(&huart2);
 
-  HAL_Delay(500);
+  HAL_Delay(300);
 
   uint8_t i2c_ok = 0;
   HAL_StatusTypeDef ret_sensor, ret_display;
@@ -107,22 +107,51 @@ int main(void)
   ret_display = HAL_I2C_IsDeviceReady(&hi2c3, (0x3C << 1), 3, 100);
 
   if (ret_sensor == HAL_OK && ret_display == HAL_OK) {
-      cli_sendln("I2C Devices ready");
+      cli_sendln("I2C ACK");
       i2c_ok = 1;
   } else {
 	  cli_sendln("I2C received NACK!!! ");
   }
 
-  HAL_Delay(500);
+  HAL_Delay(300);
 
   if (i2c_ok)
   {
 	  uint8_t id = 0;
 	  ret_sensor = HAL_I2C_Mem_Read(&hi2c3, (0x76 << 1), 0xD0, I2C_MEMADD_SIZE_8BIT, &id, 1, 100);
 
-	  char buf[5];
-	  snprintf(buf, sizeof(buf), "0x%02X", id);
-	  cli_sendln(buf);
+	  char buf_1[5];
+	  snprintf(buf_1, sizeof(buf_1), "0x%02X", id);
+	  cli_sendln(buf_1);
+
+
+	  HAL_Delay(300);
+	  uint8_t ctrl_meas = 0b00100101;
+	  HAL_I2C_Mem_Write(&hi2c3, (0x76 << 1), 0xF4, I2C_MEMADD_SIZE_8BIT, &ctrl_meas, 1, 100);
+
+	  HAL_Delay(50);
+	  uint8_t raw[3] = {0};
+	  HAL_I2C_Mem_Read(&hi2c3, (0x76 << 1), 0xFA, I2C_MEMADD_SIZE_8BIT, raw, 3, 100);
+
+	  uint32_t data = (raw[0] << 12) | (raw[1] << 4) | (raw[2] >> 4);
+
+	  char buf_2[23];
+	  int pos = 0;
+
+
+	  for (int i = 19; i >= 0; --i)
+	  {
+		  buf_2[pos++] = (data & (1u << i)) ? '1' : '0';
+
+		  if (i % 8 == 4 && i != 0)
+	      {
+	          buf_2[pos++] = ' ';
+	      }
+	  }
+
+	  buf_2[pos] = '\0';
+	  cli_sendln(buf_2);
+
   }
 
   /* USER CODE END 2 */
