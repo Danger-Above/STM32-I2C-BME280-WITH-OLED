@@ -18,6 +18,8 @@ struct bme280
 
 HAL_StatusTypeDef bme280_read_id(struct bme280 *sensor, uint8_t *id);
 HAL_StatusTypeDef bme280_read_raw(struct bme280 *sensor, uint8_t *data);
+HAL_StatusTypeDef bme280_read_reg(struct bme280 *sensor, uint8_t reg, uint8_t *data);
 HAL_StatusTypeDef bme280_write(struct bme280 *sensor, uint8_t reg, uint8_t *data);
+HAL_StatusTypeDef bme280_soft_reset(struct bme280 *sensor);
 
 #endif /* SRC_BME280_H_ */

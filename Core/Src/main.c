@@ -108,6 +108,8 @@ int main(void)
 
   uint8_t id = 0;
 
+  bme280_soft_reset(&sensor);
+  HAL_Delay(100);
   bme280_read_id(&sensor, &id);
 
   if (id == 0x60)
@@ -119,10 +121,34 @@ int main(void)
   }
 
 
-  uint8_t ctrl_meas = 0b00100101;
+
+  uint8_t ctrl_hum = 0;
+
+  bme280_read_reg(&sensor, 0xF2, &ctrl_hum);
+
+  char buf_1[15];
+  snprintf(buf_1, sizeof(buf_1), "ctrl_hum: 0x%02X", ctrl_hum);
+
+  cli_sendln(buf_1);
+
+  uint8_t mask = 0b00000111;
+  uint8_t new_ctrl_hum = 0b00000001; //oversampling x1
+  ctrl_hum = (ctrl_hum & ~mask) | (new_ctrl_hum & mask); //zanotowac dzialanie maski
+
+  char buf_2[19];
+  snprintf(buf_2, sizeof(buf_2), "new ctrl_hum: 0x%02X", ctrl_hum);
+
+  cli_sendln(buf_2);
+  bme280_write(&sensor, 0xF2, &ctrl_hum);
+
+
+
+
+  uint8_t ctrl_meas = 0b00100101; //temperature and pressure oversampling x1, forced mode
 
   bme280_write(&sensor, 0xF4, &ctrl_meas);
 
+  HAL_Delay(20);
 
   uint8_t raw[3] = {0};
 
