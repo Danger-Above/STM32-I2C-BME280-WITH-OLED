@@ -34,9 +34,11 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+//todo define dla pozostalych rejestrow
 #define I2C_TIMEOUT 100
 #define BME280_ADDR 0x76
 #define OLED_ADDR 0x3C
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -65,6 +67,26 @@ static void MX_I2C3_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 static uint8_t uart_rx_byte = 0;
+
+void u32_to_bin_str(uint32_t value, uint8_t bits, char *out, size_t out_size)
+{
+	for (size_t i = 0; i < out_size; i++)
+	        out[i] = '\0';
+
+    uint8_t pos = 0;
+
+    for (int i = bits - 1; i >= 0; i--)
+    {
+        out[pos++] = (value & (1UL << i)) ? '1' : '0';
+
+        if (i % 4 == 0 && i != 0)
+            out[pos++] = ' ';
+    }
+
+    out[pos++] = '\r';
+    out[pos++] = '\n';
+    out[pos] = '\0';
+}
 /* USER CODE END 0 */
 
 /**
@@ -124,7 +146,7 @@ int main(void)
 
   uint8_t ctrl_hum = 0;
 
-  bme280_read_reg(&sensor, 0xF2, &ctrl_hum);
+  bme280_read_reg(&sensor, 0xF2, &ctrl_hum, 1);
 
   char buf_1[15];
   snprintf(buf_1, sizeof(buf_1), "ctrl_hum: 0x%02X", ctrl_hum);
@@ -133,7 +155,7 @@ int main(void)
 
   uint8_t mask = 0b00000111;
   uint8_t new_ctrl_hum = 0b00000001; //oversampling x1
-  ctrl_hum = (ctrl_hum & ~mask) | (new_ctrl_hum & mask); //zanotowac dzialanie maski
+  ctrl_hum = (ctrl_hum & ~mask) | (new_ctrl_hum); //zanotowac dzialanie maski
 
   char buf_2[19];
   snprintf(buf_2, sizeof(buf_2), "new ctrl_hum: 0x%02X", ctrl_hum);
@@ -142,36 +164,51 @@ int main(void)
   bme280_write(&sensor, 0xF2, &ctrl_hum);
 
 
-
-
   uint8_t ctrl_meas = 0b00100101; //temperature and pressure oversampling x1, forced mode
 
   bme280_write(&sensor, 0xF4, &ctrl_meas);
 
   HAL_Delay(20);
 
-  uint8_t raw[3] = {0};
+  uint8_t raw[8] = {0};
 
   bme280_read_raw(&sensor, raw);
 
-  uint32_t data = (raw[0] << 12) | (raw[1] << 4) | (raw[2] >> 4);
+  uint32_t raw_press = (raw[0] << 12) | (raw[1] << 4) | (raw[2] >> 4);	//0xF7, 0xF8, 0xF9[7:4]
+  uint32_t raw_temp = (raw[3] << 12) | (raw[4] << 4) | (raw[5] >> 4);	//0xFA, 0xFB, 0xFC[7:4]
+  uint16_t raw_hum = (raw[6] << 8) | raw[7]; 							//0xFD, 0xFE
 
-  char buf[23];
-  int pos = 0;
-
-  for (int i = 19; i >= 0; --i)
-  {
-	  buf[pos++] = (data & (1u << i)) ? '1' : '0';
-
-	  if (i % 8 == 4 && i != 0)
-	  {
-		  buf[pos++] = ' ';
-	  }
-  }
-
-  buf[pos] = '\0';
   cli_sendln("Raw data acquired: ");
-  cli_sendln(buf);
+
+  char buf_3[64];
+  u32_to_bin_str(raw_press, 20, buf_3, sizeof(buf_3));
+  cli_sendln(buf_3);
+
+  u32_to_bin_str(raw_temp, 20, buf_3, sizeof(buf_3));
+  cli_sendln(buf_3);
+
+  u32_to_bin_str(raw_hum, 16, buf_3, sizeof(buf_3));
+  cli_sendln(buf_3);
+
+
+
+
+  uint8_t raw_compensation[33] = {0};
+  bme280_read_reg(&sensor, 0x88, raw_compensation, 26);
+  bme280_read_reg(&sensor, 0xE1, &raw_compensation[26], 7);
+
+  struct bme280_compensation_params params;
+
+  bme280_parse_compensation(raw_compensation, &params);
+
+  int32_t t_fine = 0;
+
+  int32_t temperature = bme280_calculate_temp(raw_temp, &params, &t_fine);
+
+  char buf_4[12];
+  snprintf(buf_4, sizeof(buf_4), "%ld", (long)temperature);
+  cli_sendln("Calculated temperature: ");
+  cli_sendln(buf_4);
 
   /* USER CODE END 2 */
 
