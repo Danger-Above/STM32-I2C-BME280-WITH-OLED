@@ -46,15 +46,33 @@ HAL_StatusTypeDef bme280_soft_reset(struct bme280 *sensor)
 int32_t bme280_calculate_temp(int32_t raw_temp, struct bme280_compensation_params *params, int32_t *t_fine)
 {
 	int32_t var1, var2, T;
-
 	var1 = ((((raw_temp >> 3) - ((int32_t)params->dig_T1 << 1))) * ((int32_t)params->dig_T2)) >> 11;
 	var2 = (((((raw_temp >> 4) - ((int32_t)params->dig_T1)) * ((raw_temp >> 4) - ((int32_t)params->dig_T1))) >> 12) *
 			 ((int32_t)params->dig_T3)) >> 14;
-
 	*t_fine = var1 + var2;
-
 	T = (*t_fine * 5 + 128) >> 8;
 	return T;
+}
+
+uint32_t bme280_calculate_pressure(int32_t raw_press, struct bme280_compensation_params *params, int32_t t_fine)
+{
+	int64_t var1, var2, p;
+	var1 = ((int64_t)t_fine) - 128000;
+	var2 = var1 * var1 * (int64_t)params->dig_P6;
+	var2 = var2 + ((var1 * (int64_t)params->dig_P5) << 17);
+	var2 = var2 + (((int64_t)params->dig_P4) << 35);
+	var1 = ((var1 * var1 * (int64_t)params->dig_P3) >> 8) + ((var1 * (int64_t)params->dig_P2) << 12);
+	var1 = (((((int64_t)1) << 47) + var1)) * ((int64_t)params->dig_P1) >> 33;
+	if (var1 == 0)
+	{
+		return 0;
+	}
+	p = 1048576 - raw_press;
+	p = (((p << 31) - var2) * 3125) / var1;
+	var1 = (((int64_t)params->dig_P9) * (p >> 13) * (p >> 13)) >> 25;
+	var2 = (((int64_t)params->dig_P8) * p) >> 19;
+	p = ((p + var1 + var2) >> 8) + (((int64_t)params->dig_P7) << 4);
+	return (uint32_t)p;
 }
 
 void bme280_parse_compensation(uint8_t *raw_compensation, struct bme280_compensation_params *params)

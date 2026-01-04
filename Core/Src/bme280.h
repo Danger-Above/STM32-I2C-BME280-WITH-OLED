@@ -46,6 +46,7 @@ HAL_StatusTypeDef bme280_read_reg(struct bme280 *sensor, uint8_t reg, uint8_t *d
 HAL_StatusTypeDef bme280_write(struct bme280 *sensor, uint8_t reg, uint8_t *data);
 HAL_StatusTypeDef bme280_soft_reset(struct bme280 *sensor);
 int32_t bme280_calculate_temp(int32_t raw_temp, struct bme280_compensation_params *params, int32_t *t_fine);
+uint32_t bme280_calculate_pressure(int32_t raw_press, struct bme280_compensation_params *params, int32_t t_fine);
 void bme280_parse_compensation(uint8_t *raw_compensation, struct bme280_compensation_params *params);
 
 #endif /* SRC_BME280_H_ */

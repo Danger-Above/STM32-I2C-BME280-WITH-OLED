@@ -205,10 +205,19 @@ int main(void)
 
   int32_t temperature = bme280_calculate_temp(raw_temp, &params, &t_fine);
 
-  char buf_4[12];
-  snprintf(buf_4, sizeof(buf_4), "%ld", (long)temperature);
+  uint32_t preassure = bme280_calculate_pressure(raw_press, &params, t_fine);
+
+  preassure = preassure >> 8; //result in q24.8, turncating fractional part for simplicity
+
+  char buf_4[16];
+  snprintf(buf_4, sizeof(buf_4), "%ld", (long)temperature); //todo rozpracowac co ta funkcja robi
   cli_sendln("Calculated temperature: ");
   cli_sendln(buf_4);
+
+  char buf_5[16];
+  snprintf(buf_5, sizeof(buf_5), "%lu", (unsigned long)preassure);
+  cli_sendln("Calculated preassure: ");
+  cli_sendln(buf_5);
 
   /* USER CODE END 2 */
 
