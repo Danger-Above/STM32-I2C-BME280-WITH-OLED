@@ -204,10 +204,12 @@ int main(void)
   int32_t t_fine = 0;
 
   int32_t temperature = bme280_calculate_temp(raw_temp, &params, &t_fine);
+  uint32_t pressure = bme280_calculate_press(raw_press, &params, t_fine);
+  uint32_t humidity = bme280_calculate_hum(raw_hum, &params, t_fine);
 
-  uint32_t preassure = bme280_calculate_pressure(raw_press, &params, t_fine);
-
-  preassure = preassure >> 8; //result in q24.8, turncating fractional part for simplicity
+  pressure = pressure >> 8; //result in q24.8, turncating fractional part for simplicity
+ //result in q22.10, turncating fractional part for simplicity
+  float hum_temp = (float)humidity / 1024.0f;
 
   char buf_4[16];
   snprintf(buf_4, sizeof(buf_4), "%ld", (long)temperature); //todo rozpracowac co ta funkcja robi
@@ -215,9 +217,14 @@ int main(void)
   cli_sendln(buf_4);
 
   char buf_5[16];
-  snprintf(buf_5, sizeof(buf_5), "%lu", (unsigned long)preassure);
-  cli_sendln("Calculated preassure: ");
+  snprintf(buf_5, sizeof(buf_5), "%lu", (unsigned long)pressure);
+  cli_sendln("Calculated pressure: ");
   cli_sendln(buf_5);
+
+  char buf_6[32];
+  snprintf(buf_6, sizeof(buf_6), "%.3f", hum_temp);
+  cli_sendln("Calculated humidity: ");
+  cli_sendln(buf_6);
 
   /* USER CODE END 2 */
 

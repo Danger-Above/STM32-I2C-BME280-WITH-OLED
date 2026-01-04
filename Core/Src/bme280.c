@@ -54,7 +54,7 @@ int32_t bme280_calculate_temp(int32_t raw_temp, struct bme280_compensation_param
 	return T;
 }
 
-uint32_t bme280_calculate_pressure(int32_t raw_press, struct bme280_compensation_params *params, int32_t t_fine)
+uint32_t bme280_calculate_press(int32_t raw_press, struct bme280_compensation_params *params, int32_t t_fine)
 {
 	int64_t var1, var2, p;
 	var1 = ((int64_t)t_fine) - 128000;
@@ -73,6 +73,20 @@ uint32_t bme280_calculate_pressure(int32_t raw_press, struct bme280_compensation
 	var2 = (((int64_t)params->dig_P8) * p) >> 19;
 	p = ((p + var1 + var2) >> 8) + (((int64_t)params->dig_P7) << 4);
 	return (uint32_t)p;
+}
+
+uint32_t bme280_calculate_hum(int32_t raw_hum, struct bme280_compensation_params *params, int32_t t_fine)
+{
+	int32_t v_x1_u32r;
+	v_x1_u32r = (t_fine - ((int32_t)76800));
+	v_x1_u32r = (((((raw_hum << 14) - (((int32_t)params->dig_H4) << 20) - (((int32_t)params->dig_H5) * v_x1_u32r)) +
+					((int32_t)16384)) >> 15) * (((((((v_x1_u32r * ((int32_t)params->dig_H6))  >> 10) * (((v_x1_u32r *
+					((int32_t)params->dig_H3)) >> 11) + ((int32_t)32768))) >> 10) + ((int32_t)2097152)) *
+					((int32_t)params->dig_H2) + 8192) >> 14));
+	v_x1_u32r = (v_x1_u32r - (((((v_x1_u32r >> 15) * (v_x1_u32r >> 15)) >> 7) * ((int32_t)params->dig_H1)) >> 4));
+	v_x1_u32r = (v_x1_u32r < 0 ? 0 : v_x1_u32r);
+	v_x1_u32r = (v_x1_u32r > 419430400 ? 419430400 : v_x1_u32r);
+	return (uint32_t)(v_x1_u32r >> 12);
 }
 
 void bme280_parse_compensation(uint8_t *raw_compensation, struct bme280_compensation_params *params)
