@@ -25,6 +25,7 @@
 #include "cli.h"
 #include "i2c_bus.h"
 #include "bme280.h"
+#include "oled.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -130,9 +131,11 @@ int main(void)
   MX_I2C3_Init();
   /* USER CODE BEGIN 2 */
   struct i2c_bus bus = {&hi2c3, I2C_TIMEOUT};
+  struct oled dev = {OLED_ADDR, &bus};
   struct bme280 sensor = {BME280_ADDR, &bus};
   struct bme280_compensation_params params;
   struct bme280_results results;
+
 
   uint8_t id = 0;
   const uint8_t ctrl_hum = 0b00000001; //oversampling x1
@@ -146,6 +149,14 @@ int main(void)
   cli_sendln("BME280 Initialization");
 
   bme280_init(&sensor, delay_ms, &id);
+
+  uint8_t display_on = 0xAF;
+  uint8_t display_off = 0xAE;
+  oled_send_command(&dev, 0b00000000, &display_off, 1);
+  oled_clear(&dev);
+
+
+
 
   if (id == BME280_ID)
   {

@@ -18,3 +18,9 @@ HAL_StatusTypeDef mem_write(struct i2c_bus *bus, uint8_t address, uint8_t reg, u
 	HAL_StatusTypeDef status = HAL_I2C_Mem_Write(bus->handle, (address << 1), reg, I2C_MEMADD_SIZE_8BIT, data, size, bus->timeout);
 	return status;
 }
+
+HAL_StatusTypeDef master_transmit(struct i2c_bus *bus, uint8_t address, uint8_t *data, uint16_t size)
+{
+	HAL_StatusTypeDef status = HAL_I2C_Master_Transmit(bus->handle, (address << 1), data, size, bus->timeout);
+	return status;
+}
