@@ -16,6 +16,7 @@ struct bme280
 	struct i2c_bus *bus;
 };
 
+//todo przeniesc do pliku .c
 struct bme280_compensation_params
 {
 	uint16_t dig_T1;
@@ -40,14 +41,23 @@ struct bme280_compensation_params
 	int8_t dig_H6;
 };
 
-HAL_StatusTypeDef bme280_read_id(struct bme280 *sensor, uint8_t *id);
-HAL_StatusTypeDef bme280_read_raw(struct bme280 *sensor, uint8_t *data);
-HAL_StatusTypeDef bme280_read_reg(struct bme280 *sensor, uint8_t reg, uint8_t *data, uint8_t bytes);
-HAL_StatusTypeDef bme280_write(struct bme280 *sensor, uint8_t reg, uint8_t *data);
-HAL_StatusTypeDef bme280_soft_reset(struct bme280 *sensor);
-int32_t bme280_calculate_temp(int32_t raw_temp, struct bme280_compensation_params *params, int32_t *t_fine);
-uint32_t bme280_calculate_press(int32_t raw_press, struct bme280_compensation_params *params, int32_t t_fine);
-uint32_t bme280_calculate_hum(int32_t raw_hum, struct bme280_compensation_params *params, int32_t t_fine);
-void bme280_parse_compensation(uint8_t *raw_compensation, struct bme280_compensation_params *params);
+struct bme280_results
+{
+	uint32_t raw_press;
+	uint32_t raw_temp;
+	uint16_t raw_hum;
+
+	int32_t temperature;
+	uint32_t pressure;
+	uint32_t humidity;
+};
+
+//todo static i const co trzeba
+
+HAL_StatusTypeDef bme280_soft_reset(const struct bme280 *sensor);
+void bme280_init(const struct bme280 *sensor, void (*delay_ms)(uint32_t), uint8_t *id);
+void bme280_configure_ctrl_registers(const struct bme280 *sensor, void (*delay_ms)(uint32_t), uint8_t ctrl_hum, uint8_t ctrl_meas, uint8_t config);
+void bme280_get_compensation_params(const struct bme280 *sensor, struct bme280_compensation_params *params);
+void bme280_get_measurments(const struct bme280 *sensor, const struct bme280_compensation_params *params, struct bme280_results *results);
 
 #endif /* SRC_BME280_H_ */

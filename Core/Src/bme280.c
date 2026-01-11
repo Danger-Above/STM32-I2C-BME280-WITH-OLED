@@ -11,39 +11,42 @@
 #define U16(lsb, msb)  ((uint16_t)((msb << 8) | (lsb)))
 #define S16(lsb, msb)  ((int16_t)((msb << 8) | (lsb)))
 
+#define BME280_REG_RESET 0xE0
+#define BME280_REG_MEAS_DATA 0xF7
+#define BME280_REG_ID 0xD0
+#define BME280_REG_CRTL_HUM 0xF2
+#define BME280_REG_CRTL_MEAS 0xF4
+#define BME280_REG_CONFIG 0xF5
+#define BME280_REG_CALIB_TP_START 0x88
+#define BME280_REG_CALIB_H_START 0xE1
 
-HAL_StatusTypeDef bme280_read_id(struct bme280 *sensor, uint8_t *id)
+
+static HAL_StatusTypeDef bme280_read_id(const struct bme280 *sensor, uint8_t *id)
 {
-	HAL_StatusTypeDef status = mem_read(sensor->bus, sensor->address, 0xD0, id, 1);
+	HAL_StatusTypeDef status = mem_read(sensor->bus, sensor->address, BME280_REG_ID, id, 1);
 	return status;
 }
 
-HAL_StatusTypeDef bme280_read_raw(struct bme280 *sensor, uint8_t *data)
+static HAL_StatusTypeDef bme280_read_raw(const struct bme280 *sensor, uint8_t *data)
 {
-	HAL_StatusTypeDef status = mem_read(sensor->bus, sensor->address, 0xF7, data, 8);
+	HAL_StatusTypeDef status = mem_read(sensor->bus, sensor->address, BME280_REG_MEAS_DATA, data, 8);
 	return status;
 }
 
-HAL_StatusTypeDef bme280_read_reg(struct bme280 *sensor, uint8_t reg, uint8_t *data, uint8_t bytes)
+static HAL_StatusTypeDef bme280_read_reg(const struct bme280 *sensor, uint8_t reg, uint8_t *data, uint8_t bytes)
 {
 	HAL_StatusTypeDef status = mem_read(sensor->bus, sensor->address, reg, data, bytes);
 	return status;
 }
 
-HAL_StatusTypeDef bme280_write(struct bme280 *sensor, uint8_t reg, uint8_t *data)
+static HAL_StatusTypeDef bme280_write(const struct bme280 *sensor, uint8_t reg, uint8_t *data)
 {
 	HAL_StatusTypeDef status = mem_write(sensor->bus, sensor->address, reg, data, 1);
 	return status;
 }
 
-HAL_StatusTypeDef bme280_soft_reset(struct bme280 *sensor)
-{
-	uint8_t reset_value = 0xB6;
-	HAL_StatusTypeDef status = mem_write(sensor->bus, sensor->address, 0xE0, &reset_value, 1);
-	return status;
-}
-
-int32_t bme280_calculate_temp(int32_t raw_temp, struct bme280_compensation_params *params, int32_t *t_fine)
+//the nest three functions are an implementations of the BOSCH BME280 temperature, pressure, and humidity compensation formulas
+static int32_t bme280_compensate_temp(int32_t raw_temp, const struct bme280_compensation_params *params, int32_t *t_fine)
 {
 	int32_t var1, var2, T;
 	var1 = ((((raw_temp >> 3) - ((int32_t)params->dig_T1 << 1))) * ((int32_t)params->dig_T2)) >> 11;
@@ -54,7 +57,7 @@ int32_t bme280_calculate_temp(int32_t raw_temp, struct bme280_compensation_param
 	return T;
 }
 
-uint32_t bme280_calculate_press(int32_t raw_press, struct bme280_compensation_params *params, int32_t t_fine)
+static uint32_t bme280_compensate_press(int32_t raw_press, const struct bme280_compensation_params *params, int32_t t_fine)
 {
 	int64_t var1, var2, p;
 	var1 = ((int64_t)t_fine) - 128000;
@@ -75,7 +78,7 @@ uint32_t bme280_calculate_press(int32_t raw_press, struct bme280_compensation_pa
 	return (uint32_t)p;
 }
 
-uint32_t bme280_calculate_hum(int32_t raw_hum, struct bme280_compensation_params *params, int32_t t_fine)
+static uint32_t bme280_compensate_hum(int32_t raw_hum, const struct bme280_compensation_params *params, int32_t t_fine)
 {
 	int32_t v_x1_u32r;
 	v_x1_u32r = (t_fine - ((int32_t)76800));
@@ -89,7 +92,7 @@ uint32_t bme280_calculate_hum(int32_t raw_hum, struct bme280_compensation_params
 	return (uint32_t)(v_x1_u32r >> 12);
 }
 
-void bme280_parse_compensation(uint8_t *raw_compensation, struct bme280_compensation_params *params)
+static void bme280_parse_compensation_params(uint8_t *raw_compensation, struct bme280_compensation_params *params)
 {
 	params->dig_T1 = U16(raw_compensation[0], raw_compensation[1]);		//0x88, 0x89
 	params->dig_T2 = S16(raw_compensation[2], raw_compensation[3]);		//0x8A, 0x8B
@@ -116,4 +119,66 @@ void bme280_parse_compensation(uint8_t *raw_compensation, struct bme280_compensa
 	params->dig_H5 = (int16_t)((raw_compensation[31] << 4) | (raw_compensation[30] >> 4));
 
 	params->dig_H6 = raw_compensation[32]; 								//0xE7
+}
+
+
+//todo zostawic na wszelki wypadek?
+HAL_StatusTypeDef bme280_soft_reset(const struct bme280 *sensor)
+{
+	uint8_t reset_value = 0xB6;
+	HAL_StatusTypeDef status = mem_write(sensor->bus, sensor->address, BME280_REG_RESET, &reset_value, 1);
+	return status;
+}
+
+void bme280_init(const struct bme280 *sensor, void (*delay_ms)(uint32_t), uint8_t *id)
+{
+	bme280_soft_reset(sensor);
+	delay_ms(100);	//wait a few ms for the reset to complete
+	bme280_read_id(sensor, id);
+}
+
+void bme280_configure_ctrl_registers(const struct bme280 *sensor, void (*delay_ms)(uint32_t), uint8_t ctrl_hum, uint8_t ctrl_meas, uint8_t config)
+{
+	  uint8_t new_ctrl_hum, new_config;
+	  const uint8_t ctrl_hum_mask = 0b00000111;
+	  const uint8_t config_mask = 0b00000010;
+
+	  bme280_read_reg(sensor, BME280_REG_CRTL_HUM, &new_ctrl_hum, 1);
+	  bme280_read_reg(sensor, BME280_REG_CONFIG, &new_config, 1);
+
+	  new_ctrl_hum = (new_ctrl_hum & ~ctrl_hum_mask) | (ctrl_hum); //todo zanotowac dzialanie maski
+	  new_config = (new_config & ~config_mask) | (config);
+
+	  bme280_write(sensor, BME280_REG_CRTL_HUM, &new_ctrl_hum);
+	  bme280_write(sensor, BME280_REG_CRTL_MEAS, &ctrl_meas);
+	  bme280_write(sensor, BME280_REG_CONFIG, &new_config);
+
+	  delay_ms(100);	//wait a few ms for the first measurement to complete
+}
+
+void bme280_get_compensation_params(const struct bme280 *sensor, struct bme280_compensation_params *params)
+{
+	uint8_t raw_compensation[33] = {0};
+
+	bme280_read_reg(sensor, BME280_REG_CALIB_TP_START, raw_compensation, 26);
+	bme280_read_reg(sensor, BME280_REG_CALIB_H_START, &raw_compensation[26], 7);
+
+	bme280_parse_compensation_params(raw_compensation, params);
+}
+
+void bme280_get_measurments(const struct bme280 *sensor, const struct bme280_compensation_params *params, struct bme280_results *results)
+{
+	  int32_t t_fine = 0;
+	  uint8_t raw[8] = {0};
+
+	  bme280_read_raw(sensor, raw);
+
+	  //todo funkcja do skladania surowych wynikow
+	  results->raw_press = (raw[0] << 12) | (raw[1] << 4) | (raw[2] >> 4);	//0xF7, 0xF8, 0xF9[7:4]
+	  results->raw_temp = (raw[3] << 12) | (raw[4] << 4) | (raw[5] >> 4);	//0xFA, 0xFB, 0xFC[7:4]
+	  results->raw_hum = (raw[6] << 8) | raw[7]; 							//0xFD, 0xFE
+
+	  results->temperature = bme280_compensate_temp(results->raw_temp, params, &t_fine);
+	  results->pressure = bme280_compensate_press(results->raw_press, params, t_fine);
+	  results->humidity = bme280_compensate_hum(results->raw_hum, params, t_fine);
 }

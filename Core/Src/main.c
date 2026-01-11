@@ -37,7 +37,9 @@
 //todo define dla pozostalych rejestrow
 #define I2C_TIMEOUT 100
 #define BME280_ADDR 0x76
+#define BME280_ID 0x60
 #define OLED_ADDR 0x3C
+#define MEASURE_PERIOD_MS 1000
 
 /* USER CODE END PD */
 
@@ -66,8 +68,9 @@ static void MX_I2C3_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-static uint8_t uart_rx_byte = 0;
+static volatile uint8_t uart_rx_byte = 0; //todo powaznie doczytac o volatile
 
+//todo pozbyc sie i zalatwic wlasna implementacje w cli
 void u32_to_bin_str(uint32_t value, uint8_t bits, char *out, size_t out_size)
 {
 	for (size_t i = 0; i < out_size; i++)
@@ -86,6 +89,12 @@ void u32_to_bin_str(uint32_t value, uint8_t bits, char *out, size_t out_size)
     out[pos++] = '\r';
     out[pos++] = '\n';
     out[pos] = '\0';
+}
+
+//HAL_Delay() wrapper for use in init functions
+static void delay_ms(uint32_t ms)
+{
+	HAL_Delay(ms);
 }
 /* USER CODE END 0 */
 
@@ -120,112 +129,40 @@ int main(void)
   MX_USART2_UART_Init();
   MX_I2C3_Init();
   /* USER CODE BEGIN 2 */
+  struct i2c_bus bus = {&hi2c3, I2C_TIMEOUT};
+  struct bme280 sensor = {BME280_ADDR, &bus};
+  struct bme280_compensation_params params;
+  struct bme280_results results;
+
+  uint8_t id = 0;
+  const uint8_t ctrl_hum = 0b00000001; //oversampling x1
+  const uint8_t ctrl_meas = 0b00100111; //temperature and pressure oversampling x1, normal mode
+  const uint8_t config = 0b10000000; //masurement every 500ms, filrer off, no spi
+  uint32_t last_tick = 0;
+
 
   cli_init(&huart2);
 
-  struct i2c_bus bus = {&hi2c3, I2C_TIMEOUT};
+  cli_sendln("BME280 Initialization");
 
-  struct bme280 sensor = {BME280_ADDR, &bus};
+  bme280_init(&sensor, delay_ms, &id);
 
-
-  uint8_t id = 0;
-
-  bme280_soft_reset(&sensor);
-  HAL_Delay(100);
-  bme280_read_id(&sensor, &id);
-
-  if (id == 0x60)
+  if (id == BME280_ID)
   {
+	  //todo dodac do cli obsluge wyswietlania binary, intow i float
 	  cli_sendln("ID correct");
 	  char buf[5];
 	  snprintf(buf, sizeof(buf), "0x%02X", id);
 	  cli_sendln(buf);
   }
+  else
+  {
+	  cli_sendln("ID incorrect or not recieved!!!");
+	  //todo implementacja jakiegos retry z do while? timeout?
+  }
 
-
-
-  uint8_t ctrl_hum = 0;
-
-  bme280_read_reg(&sensor, 0xF2, &ctrl_hum, 1);
-
-  char buf_1[15];
-  snprintf(buf_1, sizeof(buf_1), "ctrl_hum: 0x%02X", ctrl_hum);
-
-  cli_sendln(buf_1);
-
-  uint8_t mask = 0b00000111;
-  uint8_t new_ctrl_hum = 0b00000001; //oversampling x1
-  ctrl_hum = (ctrl_hum & ~mask) | (new_ctrl_hum); //zanotowac dzialanie maski
-
-  char buf_2[19];
-  snprintf(buf_2, sizeof(buf_2), "new ctrl_hum: 0x%02X", ctrl_hum);
-
-  cli_sendln(buf_2);
-  bme280_write(&sensor, 0xF2, &ctrl_hum);
-
-
-  uint8_t ctrl_meas = 0b00100101; //temperature and pressure oversampling x1, forced mode
-
-  bme280_write(&sensor, 0xF4, &ctrl_meas);
-
-  HAL_Delay(20);
-
-  uint8_t raw[8] = {0};
-
-  bme280_read_raw(&sensor, raw);
-
-  uint32_t raw_press = (raw[0] << 12) | (raw[1] << 4) | (raw[2] >> 4);	//0xF7, 0xF8, 0xF9[7:4]
-  uint32_t raw_temp = (raw[3] << 12) | (raw[4] << 4) | (raw[5] >> 4);	//0xFA, 0xFB, 0xFC[7:4]
-  uint16_t raw_hum = (raw[6] << 8) | raw[7]; 							//0xFD, 0xFE
-
-  cli_sendln("Raw data acquired: ");
-
-  char buf_3[64];
-  u32_to_bin_str(raw_press, 20, buf_3, sizeof(buf_3));
-  cli_sendln(buf_3);
-
-  u32_to_bin_str(raw_temp, 20, buf_3, sizeof(buf_3));
-  cli_sendln(buf_3);
-
-  u32_to_bin_str(raw_hum, 16, buf_3, sizeof(buf_3));
-  cli_sendln(buf_3);
-
-
-
-
-  uint8_t raw_compensation[33] = {0};
-  bme280_read_reg(&sensor, 0x88, raw_compensation, 26);
-  bme280_read_reg(&sensor, 0xE1, &raw_compensation[26], 7);
-
-  struct bme280_compensation_params params;
-
-  bme280_parse_compensation(raw_compensation, &params);
-
-  int32_t t_fine = 0;
-
-  int32_t temperature = bme280_calculate_temp(raw_temp, &params, &t_fine);
-  uint32_t pressure = bme280_calculate_press(raw_press, &params, t_fine);
-  uint32_t humidity = bme280_calculate_hum(raw_hum, &params, t_fine);
-
-  pressure = pressure >> 8; //result in q24.8, turncating fractional part for simplicity
- //result in q22.10, turncating fractional part for simplicity
-  float hum_temp = (float)humidity / 1024.0f;
-
-  char buf_4[16];
-  snprintf(buf_4, sizeof(buf_4), "%ld", (long)temperature); //todo rozpracowac co ta funkcja robi
-  cli_sendln("Calculated temperature: ");
-  cli_sendln(buf_4);
-
-  char buf_5[16];
-  snprintf(buf_5, sizeof(buf_5), "%lu", (unsigned long)pressure);
-  cli_sendln("Calculated pressure: ");
-  cli_sendln(buf_5);
-
-  char buf_6[32];
-  snprintf(buf_6, sizeof(buf_6), "%.3f", hum_temp);
-  cli_sendln("Calculated humidity: ");
-  cli_sendln(buf_6);
-
+  bme280_configure_ctrl_registers(&sensor, delay_ms, ctrl_hum, ctrl_meas, config);
+  bme280_get_compensation_params(&sensor, &params);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -238,6 +175,34 @@ int main(void)
 	  if (event_cli_line_ready())
 	  {
 		  cli_process_line();
+	  }
+
+	  uint32_t tick = HAL_GetTick();
+	  if ((tick - last_tick) >= MEASURE_PERIOD_MS)
+	  {
+		  last_tick = tick;
+		  bme280_get_measurments(&sensor, &params, &results);
+
+		  results.pressure = results.pressure >> 8; //result in q24.8, turncating fractional part for simplicity
+
+		  //todo co z tym floatem zrobic?
+		  float hum_temp = (float)results.humidity / 1024.0f;
+
+		  char buf_4[16];
+		  snprintf(buf_4, sizeof(buf_4), "%ld", (long)results.temperature); //todo rozpracowac co ta funkcja robi
+		  cli_sendln("Calculated temperature: ");
+		  cli_sendln(buf_4);
+
+		  char buf_5[16];
+		  snprintf(buf_5, sizeof(buf_5), "%lu", (unsigned long)results.pressure);
+		  cli_sendln("Calculated pressure: ");
+		  cli_sendln(buf_5);
+
+		  char buf_6[32];
+		  snprintf(buf_6, sizeof(buf_6), "%.3f", hum_temp);
+		  cli_sendln("Calculated humidity: ");
+		  cli_sendln(buf_6);
+		  //todo printowanie wynikow, zobacz na ostatnim commicie
 	  }
   }
   /* USER CODE END 3 */
@@ -415,11 +380,11 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
-	//check if r  x comes from usart2
+	//check if rx comes from usart2
     if (huart->Instance == USART2)
     {
     	cli_on_rx_char(uart_rx_byte);
-        HAL_UART_Receive_IT(&huart2, &uart_rx_byte, 1);
+        HAL_UART_Receive_IT(&huart2, (uint8_t *)&uart_rx_byte, 1);
     }
 }
 /* USER CODE END 4 */
