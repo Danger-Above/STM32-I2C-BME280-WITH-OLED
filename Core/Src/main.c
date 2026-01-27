@@ -155,11 +155,18 @@ int main(void)
   oled_send_command(&dev, 0b00000000, &display_off, 1);
   oled_clear(&dev);
 
+  HAL_Delay(500);
+
+  oled_send_command(&dev, 0b00000000, &display_on, 1);
+
+  const char text[] = "sranie w banie";
+  oled_send_text(&dev, text, (sizeof(text)-1));
 
 
 
   if (id == BME280_ID)
   {
+	  //todo check id dla oled
 	  //todo dodac do cli obsluge wyswietlania binary, intow i float
 	  cli_sendln("ID correct");
 	  char buf[5];
@@ -194,26 +201,10 @@ int main(void)
 		  last_tick = tick;
 		  bme280_get_measurments(&sensor, &params, &results);
 
-		  results.pressure = results.pressure >> 8; //result in q24.8, turncating fractional part for simplicity
+		  char text[22] = {0};
+		  bme280_results_to_string(&results, text, sizeof(text));
 
-		  //todo co z tym floatem zrobic?
-		  float hum_temp = (float)results.humidity / 1024.0f;
-
-		  char buf_4[16];
-		  snprintf(buf_4, sizeof(buf_4), "%ld", (long)results.temperature); //todo rozpracowac co ta funkcja robi
-		  cli_sendln("Calculated temperature: ");
-		  cli_sendln(buf_4);
-
-		  char buf_5[16];
-		  snprintf(buf_5, sizeof(buf_5), "%lu", (unsigned long)results.pressure);
-		  cli_sendln("Calculated pressure: ");
-		  cli_sendln(buf_5);
-
-		  char buf_6[32];
-		  snprintf(buf_6, sizeof(buf_6), "%.3f", hum_temp);
-		  cli_sendln("Calculated humidity: ");
-		  cli_sendln(buf_6);
-		  //todo printowanie wynikow, zobacz na ostatnim commicie
+		  oled_send_text(&dev, text, (sizeof(text) - 1));
 	  }
   }
   /* USER CODE END 3 */

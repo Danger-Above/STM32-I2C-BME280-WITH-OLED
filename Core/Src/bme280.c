@@ -6,6 +6,7 @@
  */
 
 #include "bme280.h"
+#include "stdio.h"
 
 //macros for combining 8 bit registers into uint16_t and int16_t
 #define U16(lsb, msb)  ((uint16_t)((msb << 8) | (lsb)))
@@ -121,8 +122,6 @@ static void bme280_parse_compensation_params(uint8_t *raw_compensation, struct b
 	params->dig_H6 = raw_compensation[32]; 								//0xE7
 }
 
-
-//todo zostawic na wszelki wypadek?
 HAL_StatusTypeDef bme280_soft_reset(const struct bme280 *sensor)
 {
 	uint8_t reset_value = 0xB6;
@@ -173,7 +172,6 @@ void bme280_get_measurments(const struct bme280 *sensor, const struct bme280_com
 
 	  bme280_read_raw(sensor, raw);
 
-	  //todo funkcja do skladania surowych wynikow
 	  results->raw_press = (raw[0] << 12) | (raw[1] << 4) | (raw[2] >> 4);	//0xF7, 0xF8, 0xF9[7:4]
 	  results->raw_temp = (raw[3] << 12) | (raw[4] << 4) | (raw[5] >> 4);	//0xFA, 0xFB, 0xFC[7:4]
 	  results->raw_hum = (raw[6] << 8) | raw[7]; 							//0xFD, 0xFE
@@ -181,4 +179,45 @@ void bme280_get_measurments(const struct bme280 *sensor, const struct bme280_com
 	  results->temperature = bme280_compensate_temp(results->raw_temp, params, &t_fine);
 	  results->pressure = bme280_compensate_press(results->raw_press, params, t_fine);
 	  results->humidity = bme280_compensate_hum(results->raw_hum, params, t_fine);
+}
+
+void bme280_results_to_string(const struct bme280_results *results, char *buff, uint16_t size)
+{
+	int32_t temperature = results->temperature;
+	uint32_t pressure = results->pressure;
+	uint32_t humidity = results->humidity;
+
+	char temperature_string[5];
+	char pressure_string[5];
+	char humidity_string[3];
+
+	if (temperature < 0)
+	{
+		temperature = 0;
+	}
+	else if (temperature > 9999)
+	{
+		temperature = 9999;
+	}
+	int32_t temperature_int = temperature / 100;
+	int32_t temperature_frac = temperature % 10;
+
+	pressure = pressure >> 8; //result in q24.8, turncating fractional part for simplicity
+	if (pressure > 99999)
+	{
+		pressure = 99999;
+	}
+	pressure = pressure / 100;
+
+	humidity = humidity >> 10; //result in q22.10, turncating fractional part for simplicity
+	if (humidity > 99)
+	{
+		humidity = 99;
+	}
+
+	snprintf(temperature_string, sizeof(temperature_string), "%02ld.%ld", temperature_int, temperature_frac);
+	snprintf(pressure_string, sizeof(pressure_string), "%04lu", pressure);
+	snprintf(humidity_string, sizeof(humidity_string), "%02lu", humidity);
+
+	snprintf(buff, size, "T:%s P:%s H:%s", temperature_string, pressure_string, humidity_string);
 }

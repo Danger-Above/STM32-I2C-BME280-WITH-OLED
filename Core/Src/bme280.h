@@ -59,5 +59,6 @@ void bme280_init(const struct bme280 *sensor, void (*delay_ms)(uint32_t), uint8_
 void bme280_configure_ctrl_registers(const struct bme280 *sensor, void (*delay_ms)(uint32_t), uint8_t ctrl_hum, uint8_t ctrl_meas, uint8_t config);
 void bme280_get_compensation_params(const struct bme280 *sensor, struct bme280_compensation_params *params);
 void bme280_get_measurments(const struct bme280 *sensor, const struct bme280_compensation_params *params, struct bme280_results *results);
+void bme280_results_to_string(const struct bme280_results *results, char *buff, uint16_t size);
 
 #endif /* SRC_BME280_H_ */
