@@ -150,8 +150,8 @@ void bme280_configure_ctrl_registers(const struct bme280 *sensor, void (*delay_m
 	  bme280_read_reg(sensor, BME280_REG_CONFIG, &new_config, 1);
 
 	  //apply mask so the reserved bits are not modified
-	  new_ctrl_hum = (new_ctrl_hum & ~ctrl_hum_mask) | (ctrl_hum);
-	  new_config = (new_config & ~config_mask) | (config);
+	  new_ctrl_hum = (new_ctrl_hum) | (ctrl_hum & ctrl_hum_mask);
+	  new_config = (new_config) | (config  & config_mask);
 
 	  bme280_write(sensor, BME280_REG_CRTL_HUM, &new_ctrl_hum);
 	  bme280_write(sensor, BME280_REG_CRTL_MEAS, &ctrl_meas);
@@ -204,7 +204,7 @@ void bme280_results_to_string(const struct bme280_results *results, char *buff, 
 	{
 		temperature = 9999;
 	}
-	snprintf(temperature_string, sizeof(temperature_string), "%02ld.%ld", (temperature / 100), (temperature % 10));
+	snprintf(temperature_string, sizeof(temperature_string), "%02ld.%ld", (temperature / 100), ((temperature/10) % 10));
 
 	pressure = pressure >> 8; //result in q24.8, turncating fractional part for simplicity
 	if (pressure > 99999)

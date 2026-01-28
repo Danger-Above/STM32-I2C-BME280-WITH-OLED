@@ -9,6 +9,7 @@
 #include "font6x8.h"
 
 #define OLED_ADDR_PAGE_0 0xB0
+#define OLED_COLUMNS 128
 
 static HAL_StatusTypeDef oled_send_command(const struct oled *dev, uint8_t control_byte, uint8_t *commands,
 									uint8_t number_of_commands)
@@ -34,9 +35,9 @@ static void oled_set_pointer_home(const struct oled *dev)
 	uint8_t page = OLED_ADDR_PAGE_0;
 	uint8_t column_low = 0x04; 	//offset because of 4 invisible bytes
 	uint8_t column_high = 0x10; // (high[3:0] << 4) | low[3:0] = column 0
-	oled_send_command(dev, 0x00, &page, 1); //set the current page number
-	oled_send_command(dev, 0x00, &column_low, 1); //set lower nibble of column start addres
-	oled_send_command(dev, 0x00, &column_high, 1); //set higher nibble of column start addres
+	oled_send_command(dev, 0x00, &page, 1);
+	oled_send_command(dev, 0x00, &column_low, 1);
+	oled_send_command(dev, 0x00, &column_high, 1);
 }
 
 static void oled_clear_gddram(const struct oled *dev)
@@ -50,9 +51,9 @@ static void oled_clear_gddram(const struct oled *dev)
 
 	for (uint8_t i = 0; i < 8; ++i)
 	{
-		oled_send_command(dev, 0x00, &page, 1); //set the current page number
-		oled_send_command(dev, 0x00, &column_low, 1); //set lower nibble of column start addres
-		oled_send_command(dev, 0x00, &column_high, 1); //set higher nibble of column start addres
+		oled_send_command(dev, 0x00, &page, 1);
+		oled_send_command(dev, 0x00, &column_low, 1);
+		oled_send_command(dev, 0x00, &column_high, 1);
 		oled_send_data(dev, buff, sizeof(buff));
 		++page;
 	}
@@ -76,13 +77,13 @@ void oled_init(const struct oled *dev, HAL_StatusTypeDef *status)
 //todo send text on any page
 void oled_send_text(const struct oled *dev, const char *text, uint16_t size)
 {
-	uint8_t buff[129] = {0};
+	uint8_t buff[OLED_COLUMNS + 1] = {0};
 	const uint16_t character_width = sizeof(font6x8_ascii[0]);
 	uint16_t buffer_pointer = 1; //point to the first non control byte
 
 	buff[0] = 0x40; //control byte as first buffer byte
 
-	//chceck if the caracters of a given width will fit in 128 columns
+	//chceck if the string with caracters of a given width will fit in 128 columns
 	if (size > ((sizeof(buff) - 1) / character_width))
 	{
 		return;
