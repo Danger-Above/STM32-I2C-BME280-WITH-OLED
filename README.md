@@ -1,10 +1,9 @@
 ## STM32 I2C BME280 WITH OLED
 
-This project is a small STM32 firmware, created to understand the I2C protocol and to   
-learn to read and work with documentation of different peripherial devices:   
-an environmental sensor (BME280) and an OLED display.
-Emphasis was also put on exploring more complex C programming concepts and   
-basic embedded good practices.
+This project is a small STM32 firmware, created to understand the I2C protocol and to 
+learn to read and work with documentation of different peripherial devices: 
+an environmental sensor (BME280) and an OLED display.  
+Emphasis was also put on exploring more complex C programming concepts and basic embedded good practices.
 
 **!!!Created for the NUCLEO-L476RG board!!!**
 
@@ -69,4 +68,3 @@ T:12.3 P:0456 H:78
 is smaller than the buffer
 - I2C is implemented in blocking mode
 - No I2C error handling, only one check with HAL_I2C_IsDeviceReady() is done
-
