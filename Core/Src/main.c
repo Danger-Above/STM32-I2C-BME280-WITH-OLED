@@ -21,10 +21,9 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "stdio.h"
-#include "cli.h"
 #include "i2c_bus.h"
 #include "bme280.h"
+#include "logger.h"
 #include "oled.h"
 /* USER CODE END Includes */
 
@@ -35,10 +34,8 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-//todo define dla pozostalych rejestrow
 #define I2C_TIMEOUT 100
 #define BME280_ADDR 0x76
-#define BME280_ID 0x60
 #define OLED_ADDR 0x3C
 #define MEASURE_PERIOD_MS 1000
 
@@ -69,30 +66,8 @@ static void MX_I2C3_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-static volatile uint8_t uart_rx_byte = 0; //todo powaznie doczytac o volatile
 
-//todo pozbyc sie i zalatwic wlasna implementacje w cli
-void u32_to_bin_str(uint32_t value, uint8_t bits, char *out, size_t out_size)
-{
-	for (size_t i = 0; i < out_size; i++)
-	        out[i] = '\0';
-
-    uint8_t pos = 0;
-
-    for (int i = bits - 1; i >= 0; i--)
-    {
-        out[pos++] = (value & (1UL << i)) ? '1' : '0';
-
-        if (i % 4 == 0 && i != 0)
-            out[pos++] = ' ';
-    }
-
-    out[pos++] = '\r';
-    out[pos++] = '\n';
-    out[pos] = '\0';
-}
-
-//HAL_Delay() wrapper for use in init functions
+//HAL_Delay() wrapper for use in bme280 init and register config functions
 static void delay_ms(uint32_t ms)
 {
 	HAL_Delay(ms);
@@ -136,47 +111,28 @@ int main(void)
   struct bme280_compensation_params params;
   struct bme280_results results;
 
-
-  uint8_t id = 0;
   const uint8_t ctrl_hum = 0b00000001; //oversampling x1
   const uint8_t ctrl_meas = 0b00100111; //temperature and pressure oversampling x1, normal mode
-  const uint8_t config = 0b10000000; //masurement every 500ms, filrer off, no spi
+  const uint8_t config = 0b10000000; //masurement every 500ms, filter off, no spi
+
   uint32_t last_tick = 0;
 
+  HAL_StatusTypeDef bme280_status;
+  HAL_StatusTypeDef oled_status;
 
   cli_init(&huart2);
+  cli_sendln("Initialization");
 
-  cli_sendln("BME280 Initialization");
+  bme280_init(&sensor, delay_ms, &bme280_status);
+  oled_init(&dev, &oled_status);
 
-  bme280_init(&sensor, delay_ms, &id);
-
-  uint8_t display_on = 0xAF;
-  uint8_t display_off = 0xAE;
-  oled_send_command(&dev, 0b00000000, &display_off, 1);
-  oled_clear(&dev);
-
-  HAL_Delay(500);
-
-  oled_send_command(&dev, 0b00000000, &display_on, 1);
-
-  const char text[] = "sranie w banie";
-  oled_send_text(&dev, text, (sizeof(text)-1));
-
-
-
-  if (id == BME280_ID)
+  if ((bme280_status == HAL_OK) && (oled_status == HAL_OK))
   {
-	  //todo check id dla oled
-	  //todo dodac do cli obsluge wyswietlania binary, intow i float
-	  cli_sendln("ID correct");
-	  char buf[5];
-	  snprintf(buf, sizeof(buf), "0x%02X", id);
-	  cli_sendln(buf);
+	  cli_sendln("Devices ready for communication");
   }
   else
   {
-	  cli_sendln("ID incorrect or not recieved!!!");
-	  //todo implementacja jakiegos retry z do while? timeout?
+	  cli_sendln("Error!!! Devices not ready for communication");
   }
 
   bme280_configure_ctrl_registers(&sensor, delay_ms, ctrl_hum, ctrl_meas, config);
@@ -190,21 +146,17 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  if (event_cli_line_ready())
-	  {
-		  cli_process_line();
-	  }
-
 	  uint32_t tick = HAL_GetTick();
 	  if ((tick - last_tick) >= MEASURE_PERIOD_MS)
 	  {
 		  last_tick = tick;
 		  bme280_get_measurments(&sensor, &params, &results);
 
-		  char text[22] = {0};
-		  bme280_results_to_string(&results, text, sizeof(text));
+		  char result_string[22] = {0};
+		  bme280_results_to_string(&results, result_string, sizeof(result_string));
 
-		  oled_send_text(&dev, text, (sizeof(text) - 1));
+		  cli_sendln(result_string);
+		  oled_send_text(&dev, result_string, (sizeof(result_string) - 1));
 	  }
   }
   /* USER CODE END 3 */
@@ -380,15 +332,7 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
-{
-	//check if rx comes from usart2
-    if (huart->Instance == USART2)
-    {
-    	cli_on_rx_char(uart_rx_byte);
-        HAL_UART_Receive_IT(&huart2, (uint8_t *)&uart_rx_byte, 1);
-    }
-}
+
 /* USER CODE END 4 */
 
 /**

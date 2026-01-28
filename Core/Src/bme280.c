@@ -22,12 +22,6 @@
 #define BME280_REG_CALIB_H_START 0xE1
 
 
-static HAL_StatusTypeDef bme280_read_id(const struct bme280 *sensor, uint8_t *id)
-{
-	HAL_StatusTypeDef status = mem_read(sensor->bus, sensor->address, BME280_REG_ID, id, 1);
-	return status;
-}
-
 static HAL_StatusTypeDef bme280_read_raw(const struct bme280 *sensor, uint8_t *data)
 {
 	HAL_StatusTypeDef status = mem_read(sensor->bus, sensor->address, BME280_REG_MEAS_DATA, data, 8);
@@ -46,7 +40,13 @@ static HAL_StatusTypeDef bme280_write(const struct bme280 *sensor, uint8_t reg, 
 	return status;
 }
 
-//the nest three functions are an implementations of the BOSCH BME280 temperature, pressure, and humidity compensation formulas
+static HAL_StatusTypeDef bme280_is_ready(const struct bme280 *sensor)
+{
+	HAL_StatusTypeDef status = is_device_ready(sensor->bus, sensor->address);
+	return status;
+}
+
+//implementations of the BOSCH BME280 temperature, pressure, and humidity compensation formulas
 static int32_t bme280_compensate_temp(int32_t raw_temp, const struct bme280_compensation_params *params, int32_t *t_fine)
 {
 	int32_t var1, var2, T;
@@ -122,18 +122,22 @@ static void bme280_parse_compensation_params(uint8_t *raw_compensation, struct b
 	params->dig_H6 = raw_compensation[32]; 								//0xE7
 }
 
-HAL_StatusTypeDef bme280_soft_reset(const struct bme280 *sensor)
+static HAL_StatusTypeDef bme280_soft_reset(const struct bme280 *sensor)
 {
 	uint8_t reset_value = 0xB6;
 	HAL_StatusTypeDef status = mem_write(sensor->bus, sensor->address, BME280_REG_RESET, &reset_value, 1);
 	return status;
 }
 
-void bme280_init(const struct bme280 *sensor, void (*delay_ms)(uint32_t), uint8_t *id)
+void bme280_init(const struct bme280 *sensor, void (*delay_ms)(uint32_t), HAL_StatusTypeDef *status)
 {
+	*status = bme280_is_ready(sensor);
+	if (*status != HAL_OK)
+	{
+		return;
+	}
 	bme280_soft_reset(sensor);
 	delay_ms(100);	//wait a few ms for the reset to complete
-	bme280_read_id(sensor, id);
 }
 
 void bme280_configure_ctrl_registers(const struct bme280 *sensor, void (*delay_ms)(uint32_t), uint8_t ctrl_hum, uint8_t ctrl_meas, uint8_t config)
@@ -145,7 +149,8 @@ void bme280_configure_ctrl_registers(const struct bme280 *sensor, void (*delay_m
 	  bme280_read_reg(sensor, BME280_REG_CRTL_HUM, &new_ctrl_hum, 1);
 	  bme280_read_reg(sensor, BME280_REG_CONFIG, &new_config, 1);
 
-	  new_ctrl_hum = (new_ctrl_hum & ~ctrl_hum_mask) | (ctrl_hum); //todo zanotowac dzialanie maski
+	  //apply mask so the reserved bits are not modified
+	  new_ctrl_hum = (new_ctrl_hum & ~ctrl_hum_mask) | (ctrl_hum);
 	  new_config = (new_config & ~config_mask) | (config);
 
 	  bme280_write(sensor, BME280_REG_CRTL_HUM, &new_ctrl_hum);
@@ -199,24 +204,20 @@ void bme280_results_to_string(const struct bme280_results *results, char *buff, 
 	{
 		temperature = 9999;
 	}
-	int32_t temperature_int = temperature / 100;
-	int32_t temperature_frac = temperature % 10;
+	snprintf(temperature_string, sizeof(temperature_string), "%02ld.%ld", (temperature / 100), (temperature % 10));
 
 	pressure = pressure >> 8; //result in q24.8, turncating fractional part for simplicity
 	if (pressure > 99999)
 	{
 		pressure = 99999;
 	}
-	pressure = pressure / 100;
+	snprintf(pressure_string, sizeof(pressure_string), "%04lu", (pressure / 100));
 
 	humidity = humidity >> 10; //result in q22.10, turncating fractional part for simplicity
 	if (humidity > 99)
 	{
 		humidity = 99;
 	}
-
-	snprintf(temperature_string, sizeof(temperature_string), "%02ld.%ld", temperature_int, temperature_frac);
-	snprintf(pressure_string, sizeof(pressure_string), "%04lu", pressure);
 	snprintf(humidity_string, sizeof(humidity_string), "%02lu", humidity);
 
 	snprintf(buff, size, "T:%s P:%s H:%s", temperature_string, pressure_string, humidity_string);

@@ -24,3 +24,9 @@ HAL_StatusTypeDef master_transmit(struct i2c_bus *bus, uint8_t address, uint8_t 
 	HAL_StatusTypeDef status = HAL_I2C_Master_Transmit(bus->handle, (address << 1), data, size, bus->timeout);
 	return status;
 }
+
+HAL_StatusTypeDef is_device_ready(struct i2c_bus *bus, uint8_t address)
+{
+	HAL_StatusTypeDef status = HAL_I2C_IsDeviceReady(bus->handle, (address << 1), 3, bus->timeout);
+	return status;
+}
